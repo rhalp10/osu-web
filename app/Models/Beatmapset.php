@@ -427,6 +427,8 @@ class Beatmapset extends Model implements AfterCommit
 
     public static function searchES(array $params = [])
     {
+        $canCache = true;
+
         $searchParams = [
             'index' => static::esIndexName(),
             'size' => $params['limit'],
@@ -460,6 +462,7 @@ class Beatmapset extends Model implements AfterCommit
         }
 
         if (present($params['query'])) {
+            $canCache = false;
             $query = es_query_escape_with_caveats($params['query']);
             $matchParams[] = QueryHelper::queryString($query);
         }
@@ -535,6 +538,7 @@ class Beatmapset extends Model implements AfterCommit
 
         // recommended difficulty
         if ($params['recommended'] && $params['user'] !== null) {
+            $canCache = false;
             // TODO: index convert difficulties and handle them.
             $mode = Beatmap::modeStr($params['mode'] ?? Beatmap::MODES['osu']);
             $difficulty = $params['user']->recommendedStarDifficulty($mode);
@@ -566,7 +570,18 @@ class Beatmapset extends Model implements AfterCommit
             $searchParams['body']['query']['bool']['minimum_should_match'] = 1;
         }
 
-        $results = es_search($searchParams);
+        if ($canCache && true)
+        {
+            $params['user'] = '';
+            $key = print_r($params, true);
+            $results = Cache::remember($key, 60, function () use ($searchParams) {
+                 return es_search($searchParams);
+            });
+        }
+        else
+        {
+            $results = es_search($searchParams);
+        }
 
         $beatmapsetIds = array_map(
             function ($e) {
